@@ -39,5 +39,14 @@ public abstract class DmxHandler {
         return width;
     }
 
+    /** Called whenever the ArtNetNode receives new data from the network
+     *
+     * @param data
+     */
     public abstract void onDmx(byte[] data);
+
+    /** Called when the ArtNetNode is about to shutdown
+     *
+     */
+    public void shutdown() { }
 }

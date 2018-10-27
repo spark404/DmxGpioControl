@@ -1,21 +1,21 @@
 package nl.sonicity.raspi.dmx.artnet.packets;
 
+import lombok.extern.slf4j.Slf4j;
 import nl.sonicity.raspi.dmx.artnet.ArtNetOpCodes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+@Slf4j
 public abstract class ArtNetPacket {
-    private final static Logger logger = LoggerFactory.getLogger(ArtNetPacket.class);
-
     public static final byte[] ARTNET_ID = { 'A', 'r', 't', '-', 'N', 'e', 't', 0x0};
-    public static final int ARTNET_VERSION = 14;
-    public static final int OEM = 0x4242;
+    static final int ARTNET_VERSION = 14;
+    static final int OEM = 0x4242;
 
     private final ArtNetOpCodes opCode;
     private byte[] data;
     private int length;
 
-    public ArtNetPacket(ArtNetOpCodes opCode) {
+    ArtNetPacket(ArtNetOpCodes opCode) {
         this.opCode = opCode;
     }
 
@@ -25,7 +25,7 @@ public abstract class ArtNetPacket {
         return opCode;
     }
 
-    protected void setHeader() {
+    void setHeader() {
         System.arraycopy(ARTNET_ID, 0, data, 0, 8);
         data[8] = (byte)(opCode.getOpCode() & 0xff);
         data[9] = (byte)((opCode.getOpCode() >> 8) & 0xff);

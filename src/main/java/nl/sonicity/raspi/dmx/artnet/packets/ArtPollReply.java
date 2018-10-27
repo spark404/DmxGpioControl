@@ -48,8 +48,15 @@ public class ArtPollReply extends ArtNetPacket {
         packetData[OFFSET_STATUS1] = (byte)0xf0;
         writeIntMsb(packetData, OFFSET_ESTAMAN, ArtNetPacket.OEM);
 
-        System.arraycopy("ArtNet2Midi\0".getBytes(), 0, packetData, OFFSET_SHORTNAME, 12);
-        System.arraycopy("ArtNet2Midi\0".getBytes(), 0, packetData, OFFSET_LONGNAME, 12);
+        // Shortname 18 chars
+        System.arraycopy("DmxGpioControl\0".getBytes(), 0, packetData, OFFSET_SHORTNAME, 15);
+
+        // Longname 64 chars
+        String longname = "DmxGpioControl@" +
+                System.getenv("HOSTNAME") +
+                ".local" +
+                "\0";
+        System.arraycopy(longname.getBytes(), 0, packetData, OFFSET_LONGNAME, longname.length());
 
         // one port, DMX 512
         writeIntLsb(getData(), OFFSET_PORTS, 1);

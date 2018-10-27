@@ -81,11 +81,15 @@ public class ArtNetNode implements ArtNetNodeMBean {
             terminate = true;
 
             try {
-                handlerThread.join(5000l);
+                handlerThread.join(5000L);
             } catch (InterruptedException e) {
                 log.error("Thread was interrupted while waiting for it to stop", e);
                 Thread.currentThread().interrupt();
             }
+
+            log.info("Sending shutdown signal to handlers");
+            handlers.forEach(DmxHandler::shutdown);
+
             handlerThread = null;
             terminate  = false;
             log.info("ArtNetNode on {} stopped", interfaceAddress.toString());
@@ -190,7 +194,7 @@ public class ArtNetNode implements ArtNetNodeMBean {
         return artPollReply;
     }
 
-    void handleDmxData(ArtDmx dmxPacket) {
+    private void handleDmxData(ArtDmx dmxPacket) {
         for (DmxHandler handlerEntry : handlers) {
             if (handlerEntry.getUniverse() != dmxPacket.getUniverse()) {
                 return;

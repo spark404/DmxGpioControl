@@ -6,9 +6,9 @@ import java.util.Arrays;
 
 public class ArtDmx extends ArtNetPacket {
 
-    public static final int DMX_ADDRESS = 14;
-    public static final int DMX_LENGTH_OFFSET = 16;
-    public static final int DMX_DATA_OFFSET = 18;
+    private static final int DMX_ADDRESS = 14;
+    private static final int DMX_LENGTH_OFFSET = 16;
+    private static final int DMX_DATA_OFFSET = 18;
     private int network;
     private int subnet;
     private int universe;
