@@ -1,9 +1,23 @@
+/**
+ * Copyright © 2018 Sonicity (info@sonicity.nl)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package nl.sonicity.raspi.dmx;
 
 import nl.sonicity.raspi.dmx.artnet.ArtNetException;
 import nl.sonicity.raspi.dmx.artnet.ArtNetNode;
 import nl.sonicity.raspi.dmx.artnet.ArtNetNodeConfig;
-import nl.sonicity.raspi.dmx.artnet.DummyHandler;
 import nl.sonicity.raspi.dmx.handlers.DmxToGPIOHandler;
 import org.apache.log4j.BasicConfigurator;
 import org.slf4j.Logger;
@@ -18,7 +32,6 @@ public class App
     private static final Logger LOG = LoggerFactory.getLogger(App.class);
 
     private static volatile boolean shutdown = false;
-    private static ArtNetNode artNetNode;
 
     public static void main( String[] args ) throws ArtNetException {
         BasicConfigurator.configure();
@@ -30,7 +43,7 @@ public class App
                 .networkInterface("eth0")
                 .build();
 
-        artNetNode = new ArtNetNode(artNetNodeConfig);
+        ArtNetNode artNetNode = new ArtNetNode(artNetNodeConfig);
         artNetNode.start();
 
         artNetNode.getHandlers().add(new DmxToGPIOHandler(0, 1));

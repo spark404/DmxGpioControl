@@ -1,3 +1,18 @@
+/**
+ * Copyright © 2018 Sonicity (info@sonicity.nl)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package nl.sonicity.raspi.dmx.artnet;
 
 import lombok.extern.slf4j.Slf4j;
@@ -6,7 +21,6 @@ import nl.sonicity.raspi.dmx.artnet.packets.ArtNetPacket;
 import nl.sonicity.raspi.dmx.artnet.packets.ArtPollReply;
 
 import java.io.IOException;
-import java.net.DatagramSocket;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -20,7 +34,6 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.GregorianCalendar;
 import java.util.List;
 import java.util.Locale;
@@ -104,56 +117,49 @@ public class ArtNetNode implements ArtNetNodeMBean {
         return discoveredNodes.values();
     }
 
-    private void handler() throws Exception {
-        DatagramChannel server = null;
-        server = DatagramChannel.open();
-        InetSocketAddress sAddr = new InetSocketAddress("0.0.0.0", DMX_PORT);
-        server.bind(sAddr);
+    private void handler() throws ArtNetException, IOException {
+        try (DatagramChannel server = DatagramChannel.open()) {
+            InetSocketAddress sAddr = new InetSocketAddress("0.0.0.0", DMX_PORT);
+            server.bind(sAddr);
 
-        // According to the spec, start off with ArtPollReply broadcast
-        sendArtPollReply(server);
+            // According to the spec, start off with ArtPollReply broadcast
+            sendArtPollReply();
 
-        ByteBuffer buffer = ByteBuffer.allocate(1024);
-        while (!terminate) {
+            ByteBuffer buffer = ByteBuffer.allocate(1024);
+            while (!terminate) {
 
-            SocketAddress source = server.receive(buffer);
-            ArtNetPacket artNetPacket = ArtNetPacketParser.parse(buffer.array());
+                SocketAddress source = server.receive(buffer);
+                ArtNetPacket artNetPacket = ArtNetPacketParser.parse(buffer.array());
 
-            if (artNetPacket == null) {
-                log.warn("Received something, but i don't recognize it");
-                continue;
-            }
-
-            if (artNetPacket.getOpCode() == ArtNetOpCodes.OpPoll) {
-                log.info("Poll received from {}", source.toString());
-                sendArtPollReply(server);
-            }
-
-            if (artNetPacket.getOpCode() == ArtNetOpCodes.OpPollReply) {
-                ArtPollReply artPollReply = (ArtPollReply) artNetPacket;
-                handleArtPollReply(artPollReply);
-            }
-
-            if (artNetPacket.getOpCode() == ArtNetOpCodes.OpDmx) {
-                ArtDmx dmxPacket = (ArtDmx) artNetPacket;
-                log.trace("DMX data received for {}:{}:{}, {} bytes",
-                        dmxPacket.getNetwork(), dmxPacket.getSubnet(), dmxPacket.getUniverse(),
-                        dmxPacket.getDmxLength());
-                if (dmxPacket.getNetwork() == artNetNodeConfig.getNetwork() &&
-                        dmxPacket.getSubnet() == artNetNodeConfig.getSubnet()) {
-                    handleDmxData(dmxPacket);
+                if (artNetPacket == null) {
+                    log.warn("Received something, but i don't recognize it");
+                    continue;
                 }
+
+                if (artNetPacket.getOpCode() == ArtNetOpCodes.ARTNET_OP_POLL) {
+                    log.info("Poll received from {}", source.toString());
+                    sendArtPollReply();
+                }
+
+                if (artNetPacket.getOpCode() == ArtNetOpCodes.ARNET_OP_POLLREPLY) {
+                    ArtPollReply artPollReply = (ArtPollReply)artNetPacket;
+                    handleArtPollReply(artPollReply);
+                }
+
+                if (artNetPacket.getOpCode() == ArtNetOpCodes.ARTNET_OP_DMX) {
+                    ArtDmx dmxPacket = (ArtDmx)artNetPacket;
+                    log.trace("DMX data received for {}:{}:{}, {} bytes", dmxPacket.getNetwork(), dmxPacket.getSubnet(), dmxPacket.getUniverse(), dmxPacket.getDmxLength());
+                    if (dmxPacket.getNetwork() == artNetNodeConfig.getNetwork() && dmxPacket.getSubnet() == artNetNodeConfig.getSubnet()) {
+                        handleDmxData(dmxPacket);
+                    }
+                }
+
+                buffer.clear();
             }
-
-            buffer.clear();
-        }
-
-        if (server.isOpen()) {
-            server.close();
         }
     }
 
-    private void sendArtPollReply(DatagramChannel server) throws ArtNetException, IOException {
+    private void sendArtPollReply() throws ArtNetException, IOException {
         try (DatagramChannel replyChannel = DatagramChannel.open()) {
             replyChannel.socket().setBroadcast(true);
             ArtPollReply artPollReply = generateArtPollReply();
@@ -185,7 +191,7 @@ public class ArtNetNode implements ArtNetNodeMBean {
     }
 
     private ArtPollReply generateArtPollReply() throws ArtNetException, SocketException {
-        ArtPollReply artPollReply = (ArtPollReply) ArtNetPacketParser.generatePacketByOpCode(ArtNetOpCodes.OpPollReply);
+        ArtPollReply artPollReply = (ArtPollReply) ArtNetPacketParser.generatePacketByOpCode(ArtNetOpCodes.ARNET_OP_POLLREPLY);
         artPollReply
                 .setNetSwitch(artNetNodeConfig.getNetwork(), artNetNodeConfig.getSubnet())
                 .setIpAddress(interfaceAddress.getAddress().getAddress())
