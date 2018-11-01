@@ -15,6 +15,7 @@
  */
 package nl.sonicity.raspi.dmx.artnet.packets;
 
+import nl.sonicity.raspi.dmx.artnet.ArtNetException;
 import nl.sonicity.raspi.dmx.artnet.ArtNetOpCodes;
 
 import java.util.Arrays;
@@ -33,12 +34,33 @@ public class ArtDmx extends ArtNetPacket {
     }
 
     @Override
-    public ArtNetPacket parse(byte[] data) {
+    public ArtNetPacket parse(byte[] data) throws ArtNetException {
+        isValid(data);
+
         setData(data);
-        network = data[DMX_ADDRESS+1];
-        subnet = data[DMX_ADDRESS] >> 3;
-        universe = data[DMX_ADDRESS] & 0x7;
+
+        // 15 Bit Address
+        // bit 15 = 0, bit 14-8 = net, bit 7-4 subnet, bit 3-0 universe
+        network = data[DMX_ADDRESS + 1];
+        subnet = data[DMX_ADDRESS] >> 4;
+        universe = data[DMX_ADDRESS] & 0x0F;
         return this;
+    }
+
+    private void isValid(byte[] packet) throws ArtNetException {
+        if (packet.length < 20) {
+            throw new ArtNetException("Packet too short");
+        }
+
+        for (int i = 0; i < ARTNET_ID.length; i++) {
+            if (packet[i] != ARTNET_ID[i]) {
+                throw new ArtNetException("Missing protocol header");
+            }
+        }
+
+        if (packet[8] != 0x00 || packet[9] != 0x50) {
+            throw new ArtNetException("Wrong opcode");
+        }
     }
 
     public byte[] getDmxData() {

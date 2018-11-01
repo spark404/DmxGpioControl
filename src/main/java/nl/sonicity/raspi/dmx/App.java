@@ -15,7 +15,10 @@
  */
 package nl.sonicity.raspi.dmx;
 
-import nl.sonicity.raspi.dmx.artnet.ArtNetException;
+import com.pi4j.io.gpio.GpioController;
+import com.pi4j.io.gpio.GpioFactory;
+import com.pi4j.io.gpio.GpioProvider;
+import lombok.extern.slf4j.Slf4j;
 import nl.sonicity.raspi.dmx.artnet.ArtNetNode;
 import nl.sonicity.raspi.dmx.artnet.ArtNetNodeConfig;
 import nl.sonicity.raspi.dmx.handlers.DmxToGPIOHandler;
@@ -23,30 +26,42 @@ import org.apache.log4j.BasicConfigurator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Hello world!
- *
- */
-public class App 
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Properties;
+
+@Slf4j
+public class App
 {
     private static final Logger LOG = LoggerFactory.getLogger(App.class);
 
     private static volatile boolean shutdown = false;
 
-    public static void main( String[] args ) throws ArtNetException {
+    public static void main( String[] args ) throws Exception {
         BasicConfigurator.configure();
+
+        Properties properties = readProperties();
+        String networkInterface =
+                properties.getProperty("artnet.interface", "eth0");
+        String gpioProviderClass =
+                properties.getProperty("gpio.provider", "com.pi4j.io.gpio.RaspiGpioProvider");
+
+        GpioFactory.setDefaultProvider(getGpioProvider(gpioProviderClass));
+        GpioController gpioController = GpioFactory.getInstance();
 
         ArtNetNodeConfig artNetNodeConfig = ArtNetNodeConfig.builder()
                 .network(0)
                 .subnet(0)
                 .universe(0)
-                .networkInterface("eth0")
+                .networkInterface(networkInterface)
                 .build();
 
         ArtNetNode artNetNode = new ArtNetNode(artNetNodeConfig);
         artNetNode.start();
 
-        artNetNode.getHandlers().add(new DmxToGPIOHandler(0, 1));
+        DmxToGPIOHandler dmxToGPIOHandler = new DmxToGPIOHandler(gpioController, 0, 1);
+        artNetNode.getHandlers().add(dmxToGPIOHandler);
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             LOG.info("Shutdown hook called, terminating app");
@@ -67,5 +82,29 @@ public class App
         LOG.info("Shutting down");
     }
 
+    private static GpioProvider getGpioProvider(String gpioProviderClass) throws Exception {
+        Class<?> providerClass = App.class.getClassLoader().loadClass(gpioProviderClass);
+        return (GpioProvider) providerClass.getConstructor().newInstance();
+    }
+
+    private static Properties readProperties() throws IOException {
+        Properties properties = new Properties();
+
+        // Load properties from classpath
+        try (InputStream in = App.class.getResourceAsStream("application.properties")) {
+            if (in != null) {
+                properties.load(in);
+            }
+        }
+
+        if (System.getenv("properties") != null) {
+            // We have configured properties file
+            try (InputStream in = new FileInputStream(System.getenv("properties"))) {
+                properties.load(in);
+            }
+        }
+
+        return properties;
+    }
 
 }

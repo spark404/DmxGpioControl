@@ -15,6 +15,7 @@
  */
 package nl.sonicity.raspi.dmx.artnet.packets;
 
+import nl.sonicity.raspi.dmx.artnet.ArtNetException;
 import nl.sonicity.raspi.dmx.artnet.ArtNetOpCodes;
 
 public class ArtPoll extends ArtNetPacket {
@@ -24,8 +25,26 @@ public class ArtPoll extends ArtNetPacket {
     }
 
     @Override
-    public ArtNetPacket parse(byte[] data) {
+    public ArtNetPacket parse(byte[] data) throws ArtNetException {
+        isValid(data);
+
         setData(data);
         return this;
+    }
+
+    private void isValid(byte[] packet) throws ArtNetException {
+        if (packet.length != 14) {
+            throw new ArtNetException("Packet length invalid");
+        }
+
+        for (int i = 0; i < ARTNET_ID.length; i++) {
+            if (packet[i] != ARTNET_ID[i]) {
+                throw new ArtNetException("Missing protocol header");
+            }
+        }
+
+        if (packet[8] != 0x00 || packet[9] != 0x20) {
+            throw new ArtNetException("Wrong opcode");
+        }
     }
 }

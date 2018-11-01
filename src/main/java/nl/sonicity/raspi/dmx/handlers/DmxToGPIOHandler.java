@@ -15,13 +15,14 @@
  */
 package nl.sonicity.raspi.dmx.handlers;
 
-import com.pi4j.io.gpio.GpioController;
-import com.pi4j.io.gpio.GpioFactory;
-import com.pi4j.io.gpio.GpioPinDigitalOutput;
-import com.pi4j.io.gpio.PinState;
-import com.pi4j.io.gpio.RaspiPin;
+import com.pi4j.io.gpio.*;
 import lombok.extern.slf4j.Slf4j;
 import nl.sonicity.raspi.dmx.artnet.DmxHandler;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.IntStream;
 
 @Slf4j
 public class DmxToGPIOHandler extends DmxHandler {
@@ -29,38 +30,29 @@ public class DmxToGPIOHandler extends DmxHandler {
     private static final PinState ENABLED_STATE = PinState.LOW;
     private static final PinState DISABLED_STATE = PinState.HIGH;
 
-    private final GpioPinDigitalOutput relay1;
-    private final GpioPinDigitalOutput relay2;
-    private final GpioPinDigitalOutput relay3;
-    private final GpioPinDigitalOutput relay4;
+    private static final Pin[] RELAY_PINS = new Pin[]{
+            RaspiPin.GPIO_07, RaspiPin.GPIO_11, RaspiPin.GPIO_13, RaspiPin.GPIO_15 };
+    private final List<GpioPinDigitalOutput> relays = new ArrayList<>(RELAY_PINS.length);
+
     private final GpioController gpio;
 
-    public DmxToGPIOHandler(int universe, int address) {
+    public DmxToGPIOHandler(GpioController gpioController, int universe, int address) {
         super("Dmx2GPIO", universe, address, 8);
-        gpio = GpioFactory.getInstance();
-        relay1 = gpio.provisionDigitalOutputPin(RaspiPin.GPIO_07, STARTUP_STATE);
-        relay1.setShutdownOptions(true, STARTUP_STATE);
-        log.debug("DMX address {} controls {}, current state {}", address, relay1.getName(), relay1.getState().getName());
+        this.gpio = gpioController;
 
-        relay2 = gpio.provisionDigitalOutputPin(RaspiPin.GPIO_11, STARTUP_STATE);
-        relay2.setShutdownOptions(true, STARTUP_STATE);
-        log.debug("DMX address {} controls {}, current state {}", address + 1, relay2.getName(), relay2.getState().getName());
-
-        relay3 = gpio.provisionDigitalOutputPin(RaspiPin.GPIO_13, STARTUP_STATE);
-        relay3.setShutdownOptions(true, STARTUP_STATE);
-        log.debug("DMX address {} controls {}, current state {}", address + 2, relay3.getName(), relay3.getState().getName());
-
-        relay4 = gpio.provisionDigitalOutputPin(RaspiPin.GPIO_15, STARTUP_STATE);
-        relay4.setShutdownOptions(true, STARTUP_STATE);
-        log.debug("DMX address {} controls {}, current state {}", address + 3, relay4.getName(), relay4.getState().getName());
+        Arrays.stream(RELAY_PINS).forEach(pin -> {
+            GpioPinDigitalOutput relay = gpio.provisionDigitalOutputPin(pin, STARTUP_STATE);
+            relay.setShutdownOptions(true, STARTUP_STATE);
+            log.debug("DMX address {} controls {}, current state {}", address, relay.getName(), relay.getState().getName());
+            relays.add(relay);
+        });
     }
 
     @Override
     public void onDmx(byte[] data) {
-        toggleOnDmx(relay1, data[0] & 0xFF);
-        toggleOnDmx(relay2, data[1] & 0xFF);
-        toggleOnDmx(relay3, data[2] & 0xFF);
-        toggleOnDmx(relay4, data[3] & 0xFF);
+        IntStream.range(0, relays.size()).forEach(i ->
+            toggleOnDmx(relays.get(i), data[i] & 0xFF)
+        );
     }
 
     @Override
@@ -70,11 +62,11 @@ public class DmxToGPIOHandler extends DmxHandler {
 
     private void toggleOnDmx(GpioPinDigitalOutput output, int dmxVal) {
         if (dmxVal <= 102 && output.isState(ENABLED_STATE)) {
-            log.debug("Toggle {}", output.getName());
-            output.toggle();
+            log.debug("{} set to {}", output.getName(), DISABLED_STATE.getName());
+            output.setState(DISABLED_STATE);
         } else if (dmxVal >= 153 && output.isState(DISABLED_STATE)) {
-            log.debug("Toggle {}", output.getName());
-            output.toggle();
+            log.debug("{} set to {}", output.getName(), ENABLED_STATE.getName());
+            output.setState(ENABLED_STATE);
         }
 
     }

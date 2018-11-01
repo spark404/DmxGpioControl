@@ -16,7 +16,10 @@
 package nl.sonicity.raspi.dmx.artnet.packets;
 
 import lombok.extern.slf4j.Slf4j;
+import nl.sonicity.raspi.dmx.artnet.ArtNetException;
 import nl.sonicity.raspi.dmx.artnet.ArtNetOpCodes;
+
+import java.util.Arrays;
 
 @Slf4j
 public abstract class ArtNetPacket {
@@ -32,7 +35,7 @@ public abstract class ArtNetPacket {
         this.opCode = opCode;
     }
 
-    public abstract ArtNetPacket parse(byte [] data);
+    public abstract ArtNetPacket parse(byte [] data) throws ArtNetException;
 
     public ArtNetOpCodes getOpCode() {
         return opCode;
@@ -49,7 +52,7 @@ public abstract class ArtNetPacket {
     }
 
     public void setData(byte[] data) {
-        this.data = data;
+        this.data = Arrays.copyOf(data, data.length);
     }
 
     public int getLength() {
@@ -61,11 +64,11 @@ public abstract class ArtNetPacket {
     }
 
     public int readIntMsb(byte[] data, int startPos) {
-        return data[startPos] + (data[startPos + 1] << 8);
+        return (data[startPos] & 0xff) + (data[startPos + 1] << 8);
     }
 
     public int readIntLsb(byte[] data, int startPos) {
-        return (data[startPos] << 8) + data[startPos + 1];
+        return (data[startPos] << 8) + (data[startPos + 1] & 0xff);
     }
 
     public void writeIntMsb(byte[] data, int startPos, int value) {
