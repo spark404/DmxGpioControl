@@ -19,6 +19,8 @@ import nl.sonicity.raspi.dmx.artnet.ArtNetException;
 import nl.sonicity.raspi.dmx.artnet.ArtNetOpCodes;
 
 public class ArtPoll extends ArtNetPacket {
+    private int talkToMe;
+    private int priority;
 
     public ArtPoll() {
         super(ArtNetOpCodes.ARTNET_OP_POLL);
@@ -28,23 +30,38 @@ public class ArtPoll extends ArtNetPacket {
     public ArtNetPacket parse(byte[] data) throws ArtNetException {
         isValid(data);
 
+        talkToMe = data[12];
+        priority = data[13];
+
         setData(data);
         return this;
     }
 
     private void isValid(byte[] packet) throws ArtNetException {
+        validate(packet);
+
         if (packet.length != 14) {
             throw new ArtNetException("Packet length invalid");
-        }
-
-        for (int i = 0; i < ARTNET_ID.length; i++) {
-            if (packet[i] != ARTNET_ID[i]) {
-                throw new ArtNetException("Missing protocol header");
-            }
         }
 
         if (packet[8] != 0x00 || packet[9] != 0x20) {
             throw new ArtNetException("Wrong opcode");
         }
+    }
+
+    public int getTalkToMe() {
+        return talkToMe;
+    }
+
+    public void setTalkToMe(int talkToMe) {
+        this.talkToMe = talkToMe;
+    }
+
+    public int getPriority() {
+        return priority;
+    }
+
+    public void setPriority(int priority) {
+        this.priority = priority;
     }
 }

@@ -25,9 +25,9 @@ import java.util.Arrays;
 import java.util.Optional;
 
 public class ArtNetPacketParser {
-    private ArtNetPacketParser() {}
+    public ArtNetPacketParser() {}
 
-    public static ArtNetPacket generatePacketByOpCode(ArtNetOpCodes opCode) throws ArtNetException {
+    public ArtNetPacket generatePacketByOpCode(ArtNetOpCodes opCode) throws ArtNetException {
         ArtNetPacket artNetPacket;
         try {
             artNetPacket = getTypeForOpCode(opCode)
@@ -40,16 +40,11 @@ public class ArtNetPacketParser {
         return artNetPacket;
     }
 
-    public static ArtNetPacket parse(byte[] data) throws ArtNetException{
+    public ArtNetPacket parse(byte[] data) throws ArtNetException{
         final byte[] packetData = data.clone();
 
-        byte[] id = Arrays.copyOfRange(packetData, 0, 8);
-        if (!Arrays.equals(ArtNetPacket.ARTNET_ID, id)) {
-            throw new ArtNetException("Invalid magic string, expected " + new String(ArtNetPacket.ARTNET_ID));
-        }
-
-        int opCodeValue = (packetData[9] << 8) + packetData[8];
-        ArtNetOpCodes opCode = ArtNetOpCodes.fromInt(opCodeValue);
+        ArtNetPacket.validate(data);
+        ArtNetOpCodes opCode = ArtNetPacket.extractOpCode(data);
 
         ArtNetPacket artNetPacket;
         try {
@@ -64,7 +59,10 @@ public class ArtNetPacketParser {
         return artNetPacket.parse(data);
     }
 
-    private static Optional<Class<? extends ArtNetPacket>> getTypeForOpCode(ArtNetOpCodes opCode) {
+    private Optional<Class<? extends ArtNetPacket>> getTypeForOpCode(ArtNetOpCodes opCode) {
+        if (opCode == null) {
+            return Optional.empty();
+        }
         Class clazz;
         switch (opCode) {
             case ARTNET_OP_POLL:

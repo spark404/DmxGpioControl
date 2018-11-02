@@ -37,6 +37,29 @@ public abstract class ArtNetPacket {
 
     public abstract ArtNetPacket parse(byte [] data) throws ArtNetException;
 
+    public static void validate(byte[] data) throws ArtNetException {
+        if (data.length < 12) {
+            throw new ArtNetException("Malformed packet");
+        }
+        byte[] id = Arrays.copyOfRange(data, 0, 8);
+        if (!Arrays.equals(ArtNetPacket.ARTNET_ID, id)) {
+            throw new ArtNetException("Malformed packet");
+        }
+
+        int opCodeValue = (data[9] << 8) + (data[8] & 0xff);
+        ArtNetOpCodes opCode = ArtNetOpCodes.fromInt(opCodeValue);
+
+        int protocolVersion = (data[10] << 8) + (data[11] & 0xff);
+        if (protocolVersion < 14) {
+            throw new ArtNetException("ArtNet protocol version not compatible");
+        }
+    }
+
+    public static ArtNetOpCodes extractOpCode(byte[] data) throws ArtNetException {
+        int opCodeValue = (data[9] << 8) + (data[8] & 0xff);
+        return ArtNetOpCodes.fromInt(opCodeValue);
+    }
+
     public ArtNetOpCodes getOpCode() {
         return opCode;
     }
@@ -80,4 +103,6 @@ public abstract class ArtNetPacket {
         data[startPos] = (byte)((value >> 8) & 0xff);
         data[startPos + 1] = (byte)(value & 0xff);
     }
+
+
 }

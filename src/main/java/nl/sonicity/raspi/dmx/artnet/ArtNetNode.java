@@ -56,6 +56,8 @@ public class ArtNetNode implements ArtNetNodeMBean {
     private NetworkInterface networkInterface;
     private InterfaceAddress interfaceAddress;
 
+    private ArtNetPacketParser artNetPacketParser;
+
     public ArtNetNode(ArtNetNodeConfig config) {
         this.artNetNodeConfig = config;
 
@@ -64,6 +66,8 @@ public class ArtNetNode implements ArtNetNodeMBean {
         } catch (ArtNetException e) {
             log.error("Failed to start ArtNetNode", e);
         }
+
+        artNetPacketParser = new ArtNetPacketParser();
     }
 
     public void start() throws ArtNetException {
@@ -129,7 +133,7 @@ public class ArtNetNode implements ArtNetNodeMBean {
             while (!terminate) {
 
                 SocketAddress source = server.receive(buffer);
-                ArtNetPacket artNetPacket = ArtNetPacketParser.parse(buffer.array());
+                ArtNetPacket artNetPacket = artNetPacketParser.parse(buffer.array());
 
                 if (artNetPacket == null) {
                     log.warn("Received something, but i don't recognize it");
@@ -191,7 +195,7 @@ public class ArtNetNode implements ArtNetNodeMBean {
     }
 
     private ArtPollReply generateArtPollReply() throws ArtNetException, SocketException {
-        ArtPollReply artPollReply = (ArtPollReply) ArtNetPacketParser.generatePacketByOpCode(ArtNetOpCodes.ARNET_OP_POLLREPLY);
+        ArtPollReply artPollReply = (ArtPollReply) artNetPacketParser.generatePacketByOpCode(ArtNetOpCodes.ARNET_OP_POLLREPLY);
         artPollReply
                 .setNetSwitch(artNetNodeConfig.getNetwork(), artNetNodeConfig.getSubnet())
                 .setIpAddress(interfaceAddress.getAddress().getAddress())

@@ -48,14 +48,10 @@ public class ArtDmx extends ArtNetPacket {
     }
 
     private void isValid(byte[] packet) throws ArtNetException {
+        validate(packet);
+
         if (packet.length < 20) {
             throw new ArtNetException("Packet too short");
-        }
-
-        for (int i = 0; i < ARTNET_ID.length; i++) {
-            if (packet[i] != ARTNET_ID[i]) {
-                throw new ArtNetException("Missing protocol header");
-            }
         }
 
         if (packet[8] != 0x00 || packet[9] != 0x50) {
