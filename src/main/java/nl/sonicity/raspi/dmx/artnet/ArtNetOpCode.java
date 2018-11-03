@@ -15,34 +15,44 @@
  */
 package nl.sonicity.raspi.dmx.artnet;
 
+import nl.sonicity.raspi.dmx.artnet.packets.ArtDmx;
+import nl.sonicity.raspi.dmx.artnet.packets.ArtPoll;
+import nl.sonicity.raspi.dmx.artnet.packets.ArtPollReply;
+
 import java.util.HashMap;
 import java.util.Map;
 
-public enum ArtNetOpCodes {
-    ARTNET_OP_POLL(0x2000),
-    ARNET_OP_POLLREPLY(0x2100),
-    ARTNET_OP_DMX(0x5000),
-    ARNET_OP_NZS(0x5100);
+public enum ArtNetOpCode {
+    ARTNET_OP_POLL(0x2000, ArtPoll.class),
+    ARTNET_OP_POLLREPLY(0x2100, ArtPollReply.class),
+    ARTNET_OP_DMX(0x5000, ArtDmx.class),
+    ARNET_OP_NZS(0x5100, ArtDmx.class);
 
-    private static final Map<Integer, ArtNetOpCodes> intToType = new HashMap<>();
+    private static final Map<Integer, ArtNetOpCode> intToType = new HashMap<>();
 
     static {
-        for (ArtNetOpCodes artNetOpCodes : ArtNetOpCodes.values()) {
-            intToType.put(artNetOpCodes.getOpCode(), artNetOpCodes);
+        for (ArtNetOpCode artNetOpCode : ArtNetOpCode.values()) {
+            intToType.put(artNetOpCode.getOpCode(), artNetOpCode);
         }
     }
 
     private final int opCode;
+    private final Class packetClass;
 
-    ArtNetOpCodes(int opCode) {
+    ArtNetOpCode(int opCode, Class packetClass) {
         this.opCode = opCode;
+        this.packetClass = packetClass;
     }
 
     public int getOpCode() {
         return opCode;
     }
 
-    public static ArtNetOpCodes fromInt(Integer integer) {
+    public Class getPacketClass() {
+        return packetClass;
+    }
+
+    public static ArtNetOpCode fromInt(Integer integer) {
         return intToType.get(integer);
     }
 }

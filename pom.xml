@@ -75,6 +75,17 @@
             <version>4.11</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>eu.codearte.catch-exception</groupId>
+            <artifactId>catch-exception</artifactId>
+            <version>1.4.4</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.hamcrest</groupId>
+            <artifactId>hamcrest-junit</artifactId>
+            <version>2.0.0.0</version>
+        </dependency>
     </dependencies>
 
     <build>
@@ -89,6 +100,7 @@
                         <email>info@sonicity.nl</email>
                     </properties>
                     <excludes>
+                        <exclude>**/*.properties</exclude>
                         <exclude>**/README.md</exclude>
                         <exclude>**/LICENSE.txt</exclude>
                         <exclude>src/test/resources/**</exclude>

@@ -16,9 +16,13 @@
 package nl.sonicity.raspi.dmx.artnet.packets;
 
 
-import nl.sonicity.raspi.dmx.artnet.ArtNetOpCodes;
+import nl.sonicity.raspi.dmx.artnet.ArtNetException;
+import nl.sonicity.raspi.dmx.artnet.ArtNetOpCode;
 
+import java.net.Inet4Address;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 
 public class ArtPollReply extends ArtNetPacket {
 
@@ -47,95 +51,242 @@ public class ArtPollReply extends ArtNetPacket {
     private static final int OFFSET_MACADDR = 201;
     private static final int OFFSET_STATUS2 = 212;
 
-    public ArtPollReply() {
-        super(ArtNetOpCodes.ARNET_OP_POLLREPLY);
-
-        byte[] packetData = new byte[238];
-        setData(packetData);
-        setLength(238);
-
-        // Fill fixed values
-        setHeader();
-        writeIntMsb(packetData, OFFSET_UDPPORT, 0x1936); // fixed port
-        writeIntLsb(packetData, OFFSET_VERSION, ArtNetPacket.ARTNET_VERSION);
-        writeIntLsb(packetData, OFFSET_OEM, ArtNetPacket.OEM);
-        packetData[OFFSET_UBEA_VERSION] = 0;
-        packetData[OFFSET_STATUS1] = (byte)0xf0;
-        writeIntMsb(packetData, OFFSET_ESTAMAN, ArtNetPacket.OEM);
-
-        // Shortname 18 chars
-        System.arraycopy("DmxGpioControl\0".getBytes(), 0, packetData, OFFSET_SHORTNAME, 15);
-
-        // Longname 64 chars
-        String longname = "DmxGpioControl@" +
-                System.getenv("HOSTNAME") +
-                ".local" +
-                "\0";
-        System.arraycopy(longname.getBytes(), 0, packetData, OFFSET_LONGNAME, longname.length());
-
-        // one port, DMX 512
-        writeIntLsb(getData(), OFFSET_PORTS, 1);
-        packetData[OFFSET_PORTTYPE] = (byte)0x80;
-        packetData[OFFSET_PORTTYPE + 1] = (byte)0x00;
-        packetData[OFFSET_PORTTYPE + 2] = (byte)0x00;
-        packetData[OFFSET_PORTTYPE + 3] = (byte)0x00;
-
-        packetData[OFFSET_GOODINPUT] = (byte)0x80;
-        packetData[OFFSET_GOODOUTPUT] = (byte)0x00;
-
-        packetData[OFFSET_SWIN] = (byte)0x00;
-        packetData[OFFSET_SWOUT] = (byte)0x00;
-        packetData[OFFSET_SWVIDEO] = (byte)0x00;
-        packetData[OFFSET_SWMACRO] = (byte)0x00;
-        packetData[OFFSET_SWREMOTE] = (byte)0x00;
-        packetData[OFFSET_STYLE] = (byte)0x00;// stNode
-
-        packetData[OFFSET_STATUS2] = (byte)0x08;
+    private ArtPollReply(byte[] packet) {
+        this.packet = Arrays.copyOf(packet, packet.length);
     }
 
-    @Override
-    public ArtNetPacket parse(byte[] data) {
-        setData(data);
-        return this;
-    }
+    public static ArtPollReply fromBytes(byte[] data) {
+        if (data.length != 239) {
+            throw new ArtNetException("Packet length invalid");
+        }
 
-    public ArtPollReply setIpAddress(byte[] ipAddress) {
-        System.arraycopy(ipAddress, 0, getData(), OFFSET_IPADDRESS, 4);
-        return this;
-    }
+        if (data[8] != 0x00 || data[9] != 0x21) {
+            throw new ArtNetException("Wrong opcode");
+        }
 
-    public ArtPollReply setNetSwitch(int net, int subnet) {
-        byte[] packetData = getData();
-        packetData[OFFSET_NETSWITCH] = (byte)(net & 0x7f); // Net 0 - 127
-        packetData[OFFSET_SUBNETSWITCH] = (byte)(subnet & 0xf); // Subnet 0 - 15
-        return this;
-    }
-
-    public ArtPollReply setMacAddress(byte[] hwaddr) {
-        System.arraycopy(hwaddr, 0, getData(), OFFSET_MACADDR, 6);
-        return this;
-    }
-
-    public ArtPollReply setUniverseForInputPort(int port, int universe) {
-        byte[] packetData = getData();
-        packetData[OFFSET_SWIN + port - 1] = (byte)(universe & 0x3); // Universe 0 - 7
-        return this;
-    }
-
-    public ArtPollReply setUniverseForOutputPort(int port, int universe) {
-        byte[] packetData = getData();
-        packetData[OFFSET_SWOUT + port - 1] = (byte)(universe & 0x3); // Universe 0 - 7
-        return this;
+        return new ArtPollReply(data);
     }
 
     public String getShortName() {
         byte[] shortName = new byte[18];
-        System.arraycopy(getData(), OFFSET_SHORTNAME, shortName, 0, 18);
+        System.arraycopy(packet, OFFSET_SHORTNAME, shortName, 0, 18);
         int i;
         //noinspection StatementWithEmptyBody
-        for (i = 0; i < 18 && shortName[i] != 0x0; i++) { }
-
+        for (i = 0; i < 18 && shortName[i] != 0x0; i++) {
+        }
         return new String(shortName, 0, i, Charset.forName("ASCII"));
+    }
+
+    public static class Builder extends ArtNetPacket.Builder<ArtPollReply, ArtPollReply.Builder> {
+        public Builder() {
+            super(ArtNetOpCode.ARTNET_OP_POLLREPLY.getOpCode(), 239);
+
+            // Hardcoded fixed values
+            writeUint16Msb(data, OFFSET_UDPPORT, 0x1936);
+            writeUint16Lsb(data, OFFSET_OEM, ArtNetPacket.OEM);
+            writeUint16Msb(data, OFFSET_ESTAMAN, ArtNetPacket.OEM);
+            writeUint8(data, OFFSET_SWVIDEO, 0);
+            writeUint8(data, OFFSET_SWMACRO, 0);
+            writeUint8(data, OFFSET_SWREMOTE, 0);
+        }
+
+        public Builder ipAddress(Inet4Address inet4Address) {
+            System.arraycopy(inet4Address.getAddress(), 0, data, OFFSET_IPADDRESS, 4);
+
+            return this;
+        }
+
+        public Builder firmwareVersion(int firmwareVersion) {
+            if (firmwareVersion < 0 || firmwareVersion > 65535) {
+                throw new IllegalArgumentException("Parameter out of bounds");
+            }
+
+            writeUint16Lsb(data, OFFSET_VERSION, firmwareVersion);
+
+            return this;
+        }
+
+        public Builder netswitch(int netswitch) {
+            if (netswitch < 0 || netswitch > 127) {
+                throw new IllegalArgumentException("Parameter out of bounds");
+            }
+
+            writeUint8(data, OFFSET_NETSWITCH, netswitch);
+
+            return this;
+        }
+
+        public Builder subswitch(int subswitch) {
+            if (subswitch < 0 || subswitch > 15) {
+                throw new IllegalArgumentException("Parameter out of bounds");
+            }
+
+            writeUint8(data, OFFSET_SUBNETSWITCH, subswitch);
+
+            return this;
+        }
+
+        public Builder ubeaVersion(int ubeaVersion) {
+            if (ubeaVersion < 0 || ubeaVersion > 255) {
+                throw new IllegalArgumentException("Parameter out of bounds");
+            }
+            writeUint8(data, OFFSET_UBEA_VERSION, ubeaVersion);
+
+            return this;
+        }
+
+        public Builder shortName(String shortName) {
+            byte[] value = shortName.getBytes(StandardCharsets.US_ASCII);
+            if (value.length > 17) {
+                throw new IllegalArgumentException("Parameter out of bounds");
+            }
+            System.arraycopy(value, 0, data, OFFSET_SHORTNAME, value.length);
+
+            return this;
+        }
+
+        public Builder longName(String longName) {
+            byte[] value = longName.getBytes(StandardCharsets.US_ASCII);
+            if (value.length > 63) {
+                throw new IllegalArgumentException("Parameter out of bounds");
+            }
+            System.arraycopy(value, 0, data, OFFSET_LONGNAME, value.length);
+
+            return this;
+        }
+
+        public Builder nodeReport(String nodeReport) {
+            byte[] value = nodeReport.getBytes(StandardCharsets.US_ASCII);
+            if (value.length > 63) {
+                throw new IllegalArgumentException("Parameter out of bounds");
+            }
+            System.arraycopy(value, 0, data, OFFSET_NODEREPORT, value.length);
+
+            return this;
+        }
+
+        public Builder numPorts(int numPorts) {
+            if (numPorts < 0 || numPorts > 4) {
+                throw new IllegalArgumentException("Parameter out of bounds");
+            }
+
+            writeUint16Lsb(data, OFFSET_PORTS, numPorts);
+
+            return this;
+        }
+
+        public Builder style(int style) {
+            if (style < 0 || style > 255) {
+                throw new IllegalArgumentException("Parameter out of bounds");
+            }
+
+            writeUint8(data, OFFSET_STYLE, style);
+
+            return this;
+        }
+
+        public Builder macAddress(byte[] macAddress) {
+            if (macAddress.length != 6) {
+                throw new IllegalArgumentException("Parameter out of bounds");
+            }
+            System.arraycopy(macAddress, 0, data, OFFSET_MACADDR, macAddress.length);
+
+            return this;
+        }
+
+        // TODO Split in settings
+        public Builder status1(int status1) {
+            if (status1 < 0 || status1 > 255) {
+                throw new IllegalArgumentException("Parameter out of bounds");
+            }
+            writeUint8(data, OFFSET_STATUS1, status1);
+
+            return this;
+        }
+
+        // TODO Split in settings
+        public Builder status2(int status2) {
+            if (status2 < 0 || status2 > 255) {
+                throw new IllegalArgumentException("Parameter out of bounds");
+            }
+            writeUint8(data, OFFSET_STATUS2, status2);
+
+            return this;
+        }
+
+        public Builder port(int port, boolean input, boolean output, int type) {
+            if (port < 0 || port > 3) {
+                throw new IllegalArgumentException("Parameter out of bounds");
+            }
+            if (type < 0 || type > 15) {
+                throw new IllegalArgumentException("Parameter out of bounds");
+            }
+
+            byte portSettings = 0x0;
+            if (output) {
+                portSettings = (byte)(portSettings & 0xFF ^ (1 << 7));
+            }
+            if (input) {
+                portSettings = (byte)(portSettings & 0xFF ^ (1 << 6));
+            }
+            portSettings = (byte)(portSettings ^ type);
+            writeUint8(data, OFFSET_PORTTYPE + port, portSettings);
+
+            return this;
+        }
+
+        public Builder swIn(int port, int universe) {
+            if (port < 0 || port > 3) {
+                throw new IllegalArgumentException("Parameter out of bounds");
+            }
+            if (universe < 0 || universe > 15) {
+                throw new IllegalArgumentException("Parameter out of bounds");
+            }
+            writeUint8(data, OFFSET_SWIN + port, universe);
+
+            return this;
+        }
+
+        public Builder swOut(int port, int universe) {
+            if (port < 0 || port > 3) {
+                throw new IllegalArgumentException("Parameter out of bounds");
+            }
+            if (universe < 0 || universe > 15) {
+                throw new IllegalArgumentException("Parameter out of bounds");
+            }
+            writeUint8(data, OFFSET_SWOUT + port, universe);
+
+            return this;
+        }
+
+        public Builder goodInput(int port, int status) {
+            if (port < 0 || port > 3) {
+                throw new IllegalArgumentException("Parameter out of bounds");
+            }
+            if (status < 0 || status > 255) {
+                throw new IllegalArgumentException("Parameter out of bounds");
+            }
+            writeUint8(data, OFFSET_GOODINPUT + port, status);
+
+            return this;
+        }
+
+        public Builder goodOutput(int port, int status) {
+            if (port < 0 || port > 3) {
+                throw new IllegalArgumentException("Parameter out of bounds");
+            }
+            if (status < 0 || status > 255) {
+                throw new IllegalArgumentException("Parameter out of bounds");
+            }
+            writeUint8(data, OFFSET_GOODOUTPUT + port, status);
+
+            return this;
+        }
+
+        @Override
+        public ArtPollReply build() {
+            return new ArtPollReply(data);
+        }
     }
 
 }

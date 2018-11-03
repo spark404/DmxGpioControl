@@ -15,7 +15,7 @@
  */
 package nl.sonicity.raspi.dmx.artnet;
 
-public class ArtNetException extends Exception {
+public class ArtNetException extends RuntimeException {
     public ArtNetException() {
         super();
     }
