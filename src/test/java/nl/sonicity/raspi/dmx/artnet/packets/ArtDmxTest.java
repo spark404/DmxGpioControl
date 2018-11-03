@@ -1,14 +1,82 @@
+/**
+ * Copyright © 2018 Sonicity (info@sonicity.nl)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package nl.sonicity.raspi.dmx.artnet.packets;
 
+import org.hamcrest.Matchers;
 import org.junit.Test;
 
+import java.util.Arrays;
+
 import static org.hamcrest.CoreMatchers.equalTo;
-import static org.junit.Assert.*;
+import static org.hamcrest.Matchers.instanceOf;
+import static org.junit.Assert.assertThat;
 
 public class ArtDmxTest {
     @Test
-    public void parseDmxPacket() throws Exception {
-        byte[] packet = new byte[] {
+    public void testBuilder() {
+        byte[] dmxdata = new byte[512];
+        dmxdata[0] = (byte)0xFE;
+        dmxdata[511] = (byte)0xFD;
+
+        ArtDmx dmx = new ArtDmx.Builder()
+                .sequence(5)
+                .physicalPort(1)
+                .network(15)
+                .subnet(7)
+                .universe(1)
+                .dmx(dmxdata)
+                .build();
+
+        byte[] packet = dmx.toBytes();
+
+        byte[] id = Arrays.copyOfRange(packet, 0, 8);
+        assertThat(id, Matchers.equalTo(ArtNetPacket.ARTNET_ID));
+
+        int opCodeValue = ArtNetPacket.readUint16Msb(packet, 8);
+        assertThat(opCodeValue, Matchers.equalTo(0x5000));
+
+        int version = ArtNetPacket.readUint16Lsb(packet, 10);
+        assertThat(version, Matchers.equalTo(14));
+
+        int sequence = ArtNetPacket.readUint8(packet, 12);
+        assertThat(sequence, equalTo(5));
+
+        int physicalPort = ArtNetPacket.readUint8(packet, 13);
+        assertThat(physicalPort, equalTo(1));
+
+        int subuni = ArtNetPacket.readUint8(packet, 14);
+        assertThat(subuni, equalTo(113));
+
+        int net = ArtNetPacket.readUint8(packet, 15);
+        assertThat(net, equalTo(15));
+
+        int length = ArtNetPacket.readUint16Lsb(packet, 16);
+        assertThat(length, equalTo(512));
+
+        int dmxVal = ArtNetPacket.readUint8(packet, 18);
+        assertThat(dmxVal, equalTo(0xFE));
+
+        dmxVal = ArtNetPacket.readUint8(packet, 529);
+        assertThat(dmxVal, equalTo(0xFD));
+
+    }
+
+    @Test
+    public void testParser() {
+        byte[] data = new byte[] {
                 'A', 'r', 't', '-', 'N', 'e', 't', 0x00, 0x00, 0x50, 0x00, 0x0e, 0x00, 0x00, 0x52, 0x7D, 0x02, 0x00,
                 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -44,9 +112,11 @@ public class ArtDmxTest {
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02
         };
 
-        ArtDmx artDmx = new ArtDmx();
-        artDmx.parse(packet);
+        ArtNetPacket packet = ArtNetPacket.parseBytes(data);
 
+        assertThat(packet, instanceOf(ArtDmx.class));
+
+        ArtDmx artDmx = (ArtDmx) packet;
         assertThat(artDmx.getDmxLength(), equalTo(512));
         assertThat(artDmx.getNetwork(), equalTo(125));
         assertThat(artDmx.getSubnet(), equalTo(5));
@@ -55,7 +125,7 @@ public class ArtDmxTest {
         assertThat(artDmx.getDmxData()[511], equalTo((byte)0x02));
 
         // Packet data should be immutable after parsing
-        packet[80 + 18] = (byte)0x80;
+        data[80 + 18] = (byte)0x80;
         assertThat(artDmx.getDmxData()[80], equalTo((byte)0x00));
     }
 }

@@ -18,27 +18,15 @@ package nl.sonicity.raspi.dmx.artnet;
 import lombok.extern.slf4j.Slf4j;
 import nl.sonicity.raspi.dmx.artnet.packets.ArtDmx;
 import nl.sonicity.raspi.dmx.artnet.packets.ArtNetPacket;
+import nl.sonicity.raspi.dmx.artnet.packets.ArtPoll;
 import nl.sonicity.raspi.dmx.artnet.packets.ArtPollReply;
 
 import java.io.IOException;
-import java.net.Inet4Address;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.InterfaceAddress;
-import java.net.NetworkInterface;
-import java.net.SocketAddress;
-import java.net.SocketException;
+import java.net.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.GregorianCalendar;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.TimeZone;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
@@ -56,8 +44,6 @@ public class ArtNetNode implements ArtNetNodeMBean {
     private NetworkInterface networkInterface;
     private InterfaceAddress interfaceAddress;
 
-    private ArtNetPacketParser artNetPacketParser;
-
     public ArtNetNode(ArtNetNodeConfig config) {
         this.artNetNodeConfig = config;
 
@@ -67,10 +53,9 @@ public class ArtNetNode implements ArtNetNodeMBean {
             log.error("Failed to start ArtNetNode", e);
         }
 
-        artNetPacketParser = new ArtNetPacketParser();
     }
 
-    public void start() throws ArtNetException {
+    public void start() {
         if (handlerThread != null && handlerThread.isAlive())  {
             throw new ArtNetException("Node already started");
         }
@@ -121,66 +106,97 @@ public class ArtNetNode implements ArtNetNodeMBean {
         return discoveredNodes.values();
     }
 
-    private void handler() throws ArtNetException, IOException {
+    private void handler() throws IOException {
         try (DatagramChannel server = DatagramChannel.open()) {
             InetSocketAddress sAddr = new InetSocketAddress("0.0.0.0", DMX_PORT);
             server.bind(sAddr);
+            server.configureBlocking(false);
 
             // According to the spec, start off with ArtPollReply broadcast
             sendArtPollReply();
 
-            ByteBuffer buffer = ByteBuffer.allocate(1024);
+            ByteBuffer buffer = ByteBuffer.allocate(8196);
+            var lastDmxSeen = System.currentTimeMillis();
+            var timeout = false;
+
             while (!terminate) {
+                long loopStart = System.currentTimeMillis();
 
                 SocketAddress source = server.receive(buffer);
-                ArtNetPacket artNetPacket = artNetPacketParser.parse(buffer.array());
+                if (source != null) {
+                    ArtNetPacket artNetPacket;
+                    try {
+                        artNetPacket = ArtNetPacket.parseBytes(Arrays.copyOf(buffer.array(), buffer.position()));
+                    } catch (ArtNetException e) {
+                        log.warn("Invalid packet received from {}: {}", source.toString(), e.getMessage());
+                        continue;
+                    } finally {
+                        buffer.clear();
+                    }
 
-                if (artNetPacket == null) {
-                    log.warn("Received something, but i don't recognize it");
-                    continue;
-                }
+                    if (artNetPacket == null) {
+                        log.warn("Received something, but i don't recognize it");
+                        continue;
+                    }
 
-                if (artNetPacket.getOpCode() == ArtNetOpCodes.ARTNET_OP_POLL) {
-                    log.info("Poll received from {}", source.toString());
-                    sendArtPollReply();
-                }
+                    if (artNetPacket instanceof ArtPoll) {
+                        log.info("Poll received from {}", source.toString());
+                        sendArtPollReply();
+                    }
 
-                if (artNetPacket.getOpCode() == ArtNetOpCodes.ARNET_OP_POLLREPLY) {
-                    ArtPollReply artPollReply = (ArtPollReply)artNetPacket;
-                    handleArtPollReply(artPollReply);
-                }
+                    if (artNetPacket instanceof ArtPollReply) {
+                        ArtPollReply artPollReply = (ArtPollReply) artNetPacket;
+                        handleArtPollReply(artPollReply);
+                    }
 
-                if (artNetPacket.getOpCode() == ArtNetOpCodes.ARTNET_OP_DMX) {
-                    ArtDmx dmxPacket = (ArtDmx)artNetPacket;
-                    log.trace("DMX data received for {}:{}:{}, {} bytes", dmxPacket.getNetwork(), dmxPacket.getSubnet(), dmxPacket.getUniverse(), dmxPacket.getDmxLength());
-                    if (dmxPacket.getNetwork() == artNetNodeConfig.getNetwork() && dmxPacket.getSubnet() == artNetNodeConfig.getSubnet()) {
-                        handleDmxData(dmxPacket);
+                    if (artNetPacket instanceof ArtDmx) {
+                        ArtDmx dmxPacket = (ArtDmx) artNetPacket;
+                        log.trace("DMX data received for {}:{}:{}, {} bytes", dmxPacket.getNetwork(), dmxPacket.getSubnet(), dmxPacket.getUniverse(), dmxPacket.getDmxLength());
+                        if (dmxPacket.getNetwork() == artNetNodeConfig.getNetwork() && dmxPacket.getSubnet() == artNetNodeConfig.getSubnet()) {
+                            lastDmxSeen = System.currentTimeMillis();
+                            timeout = false;
+                            handleDmxData(dmxPacket);
+                        }
                     }
                 }
 
-                buffer.clear();
+                if (lastDmxSeen + 10000 < System.currentTimeMillis() && !timeout) {
+                    // No DMX data for 10 seconds
+                    log.warn("No DMX data received for 10 seconds");
+                    timeout = true;
+                    handlers.forEach(DmxHandler::timeout);
+                }
+
+                long loopEnd = System.currentTimeMillis();
+                if (loopEnd + 500 < loopStart) {
+                    try {
+                        Thread.sleep(loopEnd + 500 - loopStart);
+                    } catch (InterruptedException e) {
+                        log.error("End-of-loop sleep interrupted");
+                        Thread.currentThread().interrupt();
+                    }
+                }
             }
         }
     }
 
-    private void sendArtPollReply() throws ArtNetException, IOException {
+    private void sendArtPollReply() throws IOException {
         try (DatagramChannel replyChannel = DatagramChannel.open()) {
             replyChannel.socket().setBroadcast(true);
             ArtPollReply artPollReply = generateArtPollReply();
 
 
             // Send on local network broadcast
-            ByteBuffer reply = ByteBuffer.wrap(artPollReply.getData());
+            ByteBuffer reply = ByteBuffer.wrap(artPollReply.toBytes());
             replyChannel.send(reply, new InetSocketAddress(interfaceAddress.getBroadcast(), DMX_PORT));
+
             // Send on wire broadcast
-            reply = ByteBuffer.wrap(artPollReply.getData());
+            reply = ByteBuffer.wrap(artPollReply.toBytes());
             replyChannel.send(reply, new InetSocketAddress(InetAddress.getByName("255.255.255.255"), DMX_PORT));
         }
     }
 
     private void handleArtPollReply(ArtPollReply artPollReply) {
-        log.info("Poll reply seen from {}", artPollReply.getShortName());
-
         SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss,SSS", Locale.getDefault());
         GregorianCalendar calendar = new GregorianCalendar(TimeZone.getDefault());
         calendar.setTimeInMillis(System.currentTimeMillis());
@@ -189,19 +205,24 @@ public class ArtNetNode implements ArtNetNodeMBean {
         if (discoveredNodes.containsKey(artPollReply.getShortName())) {
             discoveredNodes.get(artPollReply.getShortName()).setLastSeen(lastSeen);
         } else {
+            log.info("First poll reply seen from \"{}\"", artPollReply.getShortName());
             discoveredNodes.put(artPollReply.getShortName(), new ArtNetNodeInfo(artPollReply.getShortName(), lastSeen));
         }
         new ArtNetNodeInfo(artPollReply.getShortName(), lastSeen);
     }
 
-    private ArtPollReply generateArtPollReply() throws ArtNetException, SocketException {
-        ArtPollReply artPollReply = (ArtPollReply) artNetPacketParser.generatePacketByOpCode(ArtNetOpCodes.ARNET_OP_POLLREPLY);
-        artPollReply
-                .setNetSwitch(artNetNodeConfig.getNetwork(), artNetNodeConfig.getSubnet())
-                .setIpAddress(interfaceAddress.getAddress().getAddress())
-                .setMacAddress(networkInterface.getHardwareAddress())
-                .setUniverseForInputPort(1, artNetNodeConfig.getUniverse());
-        return artPollReply;
+    private ArtPollReply generateArtPollReply() throws SocketException {
+        return new ArtPollReply.Builder()
+                .firmwareVersion(0)
+                .shortName("ArtNetNode")
+                .longName("ArnNetNode")
+                .ipAddress((Inet4Address) interfaceAddress.getAddress())
+                .netswitch(artNetNodeConfig.getNetwork())
+                .subswitch(artNetNodeConfig.getSubnet())
+                .macAddress(networkInterface.getHardwareAddress())
+                .port(0, false, true, 0)
+                .swIn(0, artNetNodeConfig.getUniverse())
+                .build();
     }
 
     private void handleDmxData(ArtDmx dmxPacket) {
@@ -220,7 +241,7 @@ public class ArtNetNode implements ArtNetNodeMBean {
         }
     }
 
-    private void configureNetworkFromInterfaceName(String network) throws ArtNetException {
+    private void configureNetworkFromInterfaceName(String network) {
         try {
             NetworkInterface artNetInterface = NetworkInterface.getByName(network);
             InterfaceAddress artNetInterfaceAddress = null;

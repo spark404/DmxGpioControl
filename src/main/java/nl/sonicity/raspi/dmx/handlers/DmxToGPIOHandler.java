@@ -60,6 +60,13 @@ public class DmxToGPIOHandler extends DmxHandler {
         gpio.shutdown();
     }
 
+    @Override
+    public void timeout() {
+        IntStream.range(0, relays.size()).forEach(i ->
+            relays.get(i).setState(STARTUP_STATE)
+        );
+    }
+
     private void toggleOnDmx(GpioPinDigitalOutput output, int dmxVal) {
         if (dmxVal <= 102 && output.isState(ENABLED_STATE)) {
             log.debug("{} set to {}", output.getName(), DISABLED_STATE.getName());

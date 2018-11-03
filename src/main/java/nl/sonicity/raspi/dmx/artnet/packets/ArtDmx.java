@@ -16,69 +16,129 @@
 package nl.sonicity.raspi.dmx.artnet.packets;
 
 import nl.sonicity.raspi.dmx.artnet.ArtNetException;
-import nl.sonicity.raspi.dmx.artnet.ArtNetOpCodes;
+import nl.sonicity.raspi.dmx.artnet.ArtNetOpCode;
 
 import java.util.Arrays;
 
 public class ArtDmx extends ArtNetPacket {
 
-    private static final int DMX_ADDRESS = 14;
-    private static final int DMX_LENGTH_OFFSET = 16;
-    private static final int DMX_DATA_OFFSET = 18;
-    private int network;
-    private int subnet;
-    private int universe;
+    private static final int OFFSET_SEQUENCE = 12;
+    private static final int OFFSET_PHYSICAL_PORT = 13;
+    private static final int OFFSET_ADDRESS = 14;
+    private static final int OFFSET_LENGTH = 16;
+    private static final int OFFSET_DMX = 18;
 
-    public ArtDmx() {
-        super(ArtNetOpCodes.ARTNET_OP_DMX);
-    }
-
-    @Override
-    public ArtNetPacket parse(byte[] data) throws ArtNetException {
-        isValid(data);
-
-        setData(data);
-
-        // 15 Bit Address
-        // bit 15 = 0, bit 14-8 = net, bit 7-4 subnet, bit 3-0 universe
-        network = data[DMX_ADDRESS + 1];
-        subnet = data[DMX_ADDRESS] >> 4;
-        universe = data[DMX_ADDRESS] & 0x0F;
-        return this;
-    }
-
-    private void isValid(byte[] packet) throws ArtNetException {
-        validate(packet);
-
-        if (packet.length < 20) {
-            throw new ArtNetException("Packet too short");
-        }
-
-        if (packet[8] != 0x00 || packet[9] != 0x50) {
-            throw new ArtNetException("Wrong opcode");
-        }
-    }
-
-    public byte[] getDmxData() {
-        byte[] data = getData();
-        int dmxLength = readIntLsb(data, DMX_LENGTH_OFFSET);
-        return Arrays.copyOfRange(data, DMX_DATA_OFFSET, DMX_DATA_OFFSET + dmxLength);
-    }
-
-    public int getDmxLength() {
-        byte[] data = getData();
-        return readIntLsb(data, DMX_LENGTH_OFFSET);
-    }
-
-    public int getNetwork() {
-        return network;
-    }
-
-    public int getSubnet() {
-        return subnet;
+    private ArtDmx(byte[] packet) {
+        this.packet = Arrays.copyOf(packet, packet.length);
     }
 
     public int getUniverse() {
-        return universe;
+        return packet[OFFSET_ADDRESS] & 0x0F;
     }
+
+    public int getSubnet() {
+        return packet[OFFSET_ADDRESS] >> 4;
+    }
+
+    public int getNetwork() {
+        return packet[OFFSET_ADDRESS + 1];
+    }
+
+    public int getDmxLength() {
+        return readUint16Lsb(packet, OFFSET_LENGTH);
+    }
+
+    public byte[] getDmxData() {
+        int dmxLength = readUint16Lsb(packet, OFFSET_LENGTH);
+        return Arrays.copyOfRange(packet, OFFSET_DMX, OFFSET_DMX + dmxLength);
+    }
+
+    public static ArtDmx fromBytes(byte[] data) {
+        if (data.length < 20) {
+            throw new ArtNetException("Packet too short");
+        }
+
+        if (data[8] != 0x00 || data[9] != 0x50) {
+            throw new ArtNetException("Wrong opcode");
+        }
+
+        int protocolVersion = (data[10] << 8) + (data[11] & 0xff);
+        if (protocolVersion < 14) {
+            throw new ArtNetException("ArtNet protocol version not compatible");
+        }
+
+        return new ArtDmx(data);
+    }
+
+    public static class Builder extends ArtNetPacket.Builder<ArtDmx, Builder> {
+        public Builder() {
+            super(ArtNetOpCode.ARTNET_OP_DMX.getOpCode(), 530);
+        }
+
+        Builder sequence(int sequence) {
+            if (sequence < 0 || sequence > 255) {
+                throw new IllegalArgumentException("Parameter out of bounds");
+            }
+
+            data[OFFSET_SEQUENCE] = (byte)sequence;
+
+            return this;
+        }
+
+        Builder physicalPort(int physicalPort) {
+            if (physicalPort < 0 || physicalPort > 255) {
+                throw new IllegalArgumentException("Parameter out of bounds");
+            }
+
+            data[OFFSET_PHYSICAL_PORT] = (byte)physicalPort;
+
+            return this;
+        }
+
+        Builder universe(int universe) {
+            if (universe < 0 || universe > 15) {
+                throw new IllegalArgumentException("Parameter out of bounds");
+            }
+
+            data[OFFSET_ADDRESS] = (byte)(data[OFFSET_ADDRESS] & 0xF0 ^ (byte)universe);
+
+            return this;
+        }
+
+        Builder subnet(int subnet) {
+            if (subnet < 0 || subnet > 15) {
+                throw new IllegalArgumentException("Parameter out of bounds");
+            }
+
+            data[OFFSET_ADDRESS] = (byte)(data[OFFSET_ADDRESS] & 0x0F ^ (byte)subnet << 4);
+
+            return this;
+        }
+
+        Builder network(int network) {
+            if (network < 0 || network > 127) {
+                throw new IllegalArgumentException("Parameter out of bounds");
+            }
+
+            data[OFFSET_ADDRESS + 1] = (byte)network;
+
+            return this;
+        }
+
+        Builder dmx(byte[] dmx) {
+            if (dmx.length != 512) {
+                throw new IllegalArgumentException("Array length must be 512");
+            }
+
+            System.arraycopy(dmx, 0, data, OFFSET_DMX, 512);
+            writeUint16Lsb(data, OFFSET_LENGTH, 512);
+            return this;
+        }
+
+        @Override
+        public ArtDmx build() {
+            return new ArtDmx(data);
+        }
+    }
+
 }

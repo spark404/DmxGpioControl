@@ -64,4 +64,9 @@ public abstract class DmxHandler {
      *
      */
     public void shutdown() { }
+
+    /** Called when no DMX data has been received withing the globally configured timeout
+     *
+     */
+    public void timeout() { }
 }
