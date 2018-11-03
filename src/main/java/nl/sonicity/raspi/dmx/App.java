@@ -65,8 +65,8 @@ public class App
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             LOG.info("Shutdown hook called, terminating app");
-            shutdown = true;
             artNetNode.stop();
+            shutdown = true;
         }));
 
         while (!shutdown) {
