@@ -17,7 +17,13 @@ package nl.sonicity.raspi.dmx;
 
 import com.pi4j.io.gpio.GpioController;
 import com.pi4j.io.gpio.GpioFactory;
+import com.pi4j.io.gpio.GpioPin;
+import com.pi4j.io.gpio.GpioPinDigitalInput;
 import com.pi4j.io.gpio.GpioProvider;
+import com.pi4j.io.gpio.Pin;
+import com.pi4j.io.gpio.RaspiPin;
+import com.pi4j.io.gpio.event.GpioPinDigitalStateChangeEvent;
+import com.pi4j.io.gpio.event.GpioPinListenerDigital;
 import lombok.extern.slf4j.Slf4j;
 import nl.sonicity.raspi.dmx.artnet.ArtNetNode;
 import nl.sonicity.raspi.dmx.artnet.ArtNetNodeConfig;
@@ -30,6 +36,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
+import java.util.function.Function;
 
 @Slf4j
 public class App
@@ -63,6 +70,15 @@ public class App
         DmxToGPIOHandler dmxToGPIOHandler = new DmxToGPIOHandler(gpioController, 0, 1);
         artNetNode.getHandlers().add(dmxToGPIOHandler);
 
+        Debouncer<GpioPin> debouncer = new Debouncer<>(gpioPin -> {
+            log.info("Debounced input state for pin {} is {}", gpioPin.getName(), "blub");
+            return null;
+        }, 200);
+
+        GpioPinDigitalInput buttonOne = gpioController.provisionDigitalInputPin(RaspiPin.GPIO_02);
+        GpioPinDigitalInput buttonTwo = gpioController.provisionDigitalInputPin(RaspiPin.GPIO_03);
+        gpioController.addListener((GpioPinListenerDigital)event -> debouncer.call(event.getPin()), buttonOne, buttonTwo);
+
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             LOG.info("Shutdown hook called, terminating app");
             artNetNode.stop();
@@ -78,6 +94,8 @@ public class App
                 Thread.currentThread().interrupt();
             }
         }
+
+        debouncer.terminate();
 
         LOG.info("Shutting down");
     }
