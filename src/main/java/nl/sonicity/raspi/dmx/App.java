@@ -15,14 +15,7 @@
  */
 package nl.sonicity.raspi.dmx;
 
-import com.pi4j.io.gpio.GpioController;
-import com.pi4j.io.gpio.GpioFactory;
-import com.pi4j.io.gpio.GpioPin;
-import com.pi4j.io.gpio.GpioPinDigitalInput;
-import com.pi4j.io.gpio.GpioProvider;
-import com.pi4j.io.gpio.Pin;
-import com.pi4j.io.gpio.RaspiPin;
-import com.pi4j.io.gpio.event.GpioPinDigitalStateChangeEvent;
+import com.pi4j.io.gpio.*;
 import com.pi4j.io.gpio.event.GpioPinListenerDigital;
 import lombok.extern.slf4j.Slf4j;
 import nl.sonicity.raspi.dmx.artnet.ArtNetNode;
@@ -36,12 +29,14 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
-import java.util.function.Function;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 @Slf4j
 public class App
 {
     private static final Logger LOG = LoggerFactory.getLogger(App.class);
+    private static final PinState BUTTON_PRESSED = PinState.LOW; // Pull down button
 
     private static volatile boolean shutdown = false;
 
@@ -70,13 +65,29 @@ public class App
         DmxToGPIOHandler dmxToGPIOHandler = new DmxToGPIOHandler(gpioController, 0, 1);
         artNetNode.getHandlers().add(dmxToGPIOHandler);
 
-        Debouncer<GpioPin> debouncer = new Debouncer<>(gpioPin -> {
-            log.info("Debounced input state for pin {} is {}", gpioPin.getName(), "blub");
-            return null;
-        }, 200);
+        ConcurrentMap<GpioPin, PinState> previousStateStore = new ConcurrentHashMap<>();
 
-        GpioPinDigitalInput buttonOne = gpioController.provisionDigitalInputPin(RaspiPin.GPIO_02);
-        GpioPinDigitalInput buttonTwo = gpioController.provisionDigitalInputPin(RaspiPin.GPIO_03);
+        GpioPinDigitalOutput trayRelay = gpioController.provisionDigitalOutputPin(RaspiPin.GPIO_00, PinState.HIGH);
+        TrayManager trayManager = new TrayManager(trayRelay);
+
+        Debouncer<GpioPin> debouncer = new Debouncer<>(gpioPin -> {
+            PinState state = gpioController.getState((GpioPinDigital) gpioPin);
+            PinState previousState = previousStateStore.put(gpioPin, state);
+            if (!state.equals(previousState)) {
+                if (state.equals(BUTTON_PRESSED) && gpioPin.getPin().equals(RaspiPin.GPIO_02)) {
+                    LOG.debug("Calling TrayManager.openClose()");
+                    trayManager.openClose();
+                } else if (state.equals(BUTTON_PRESSED) && gpioPin.getPin().equals(RaspiPin.GPIO_03)) {
+                    LOG.debug("Calling TrayManager.openClose(5000L)");
+                    trayManager.openClose(5000L);
+                }
+            }
+            return null;
+        }, 10);
+
+
+        GpioPinDigitalInput buttonOne = gpioController.provisionDigitalInputPin(RaspiPin.GPIO_02, PinPullResistance.PULL_UP);
+        GpioPinDigitalInput buttonTwo = gpioController.provisionDigitalInputPin(RaspiPin.GPIO_03, PinPullResistance.PULL_UP);
         gpioController.addListener((GpioPinListenerDigital)event -> debouncer.call(event.getPin()), buttonOne, buttonTwo);
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {

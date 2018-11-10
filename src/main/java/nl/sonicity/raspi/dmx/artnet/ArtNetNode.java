@@ -140,11 +140,12 @@ public class ArtNetNode implements ArtNetNodeMBean {
                     }
 
                     if (artNetPacket instanceof ArtPoll) {
-                        log.info("Poll received from {}", source.toString());
+                        log.trace("Poll received from {}", source.toString());
                         sendArtPollReply();
                     }
 
                     if (artNetPacket instanceof ArtPollReply) {
+                        log.trace("PollReply received from {}", source.toString());
                         ArtPollReply artPollReply = (ArtPollReply) artNetPacket;
                         handleArtPollReply(artPollReply);
                     }
